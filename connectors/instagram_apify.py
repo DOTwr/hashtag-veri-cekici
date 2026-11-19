@@ -5,12 +5,8 @@ Gerekli: Apify API anahtari (ucretsiz plan: ayda 5 USD kredi).
 """
 from datetime import date
 
-import requests
-
+from .apify_run import past_runs_items, run_actor
 from .base import Connector, Post, anon
-
-ACTOR = "apify~instagram-hashtag-scraper"
-ENDPOINT = f"https://api.apify.com/v2/acts/{ACTOR}/run-sync-get-dataset-items"
 
 
 def _int(v) -> int:
@@ -42,7 +38,12 @@ def _media_url(item: dict) -> str:
 
 def _timestamp(item: dict) -> str:
     ts = item.get("timestamp") or ""
-    return ts.replace("Z", "+00:00") if isinstance(ts, str) else ""
+    if not isinstance(ts, str):
+        return ""
+    ts = ts.strip()
+    if ts.endswith(" UTC"):                       # "2026-11-19 00:45:26 UTC"
+        ts = ts[:-4].replace(" ", "T") + "+00:00"
+    return ts.replace("Z", "+00:00")
 
 
 def item_to_post(item: dict) -> Post:
@@ -63,6 +64,19 @@ def item_to_post(item: dict) -> Post:
     )
 
 
+def items_to_posts(items, limit=None) -> list:
+    posts, seen = [], set()
+    for it in items:
+        if not isinstance(it, dict) or it.get("error"):
+            continue
+        p = item_to_post(it)
+        if not p.permalink or p.post_id in seen:
+            continue
+        seen.add(p.post_id)
+        posts.append(p)
+    return posts if limit is None else posts[: int(limit)]
+
+
 class InstagramApifyConnector(Connector):
     name = "Instagram (Apify, hesapsiz)"
     notes = [
@@ -72,55 +86,24 @@ class InstagramApifyConnector(Connector):
         "Ucretsiz planda Apify her aramada en fazla ~30 gonderi verir (Instagram'in ilk sayfasi).",
     ]
 
-    def __init__(self, token: str, results_type: str = "posts"):
+    def __init__(self, token: str, results_type: str = "posts", include_history: bool = False,
+                 on_progress=None):
         self.token = (token or "").strip()
         self.results_type = results_type
+        self.include_history = include_history
+        self.on_progress = on_progress
 
     def fetch(self, hashtag, start: date, end: date, pool_limit: int):
-        if not self.token:
-            raise RuntimeError("Apify API anahtari gerekli.")
         tag = hashtag.lstrip("#").strip()
-        body = {
+        items = run_actor(self.token, "ig_hashtag", {
             "hashtags": [tag],
             "resultsType": self.results_type,
             "resultsLimit": int(pool_limit),
-        }
-        try:
-            r = requests.post(
-                ENDPOINT,
-                params={"timeout": 280},
-                headers={"Authorization": f"Bearer {self.token}"},
-                json=body,
-                timeout=300,
-            )
-        except requests.Timeout:
-            raise RuntimeError("Apify yanit vermedi (zaman asimi). Daha kucuk bir gonderi sayisiyla tekrar dene.")
-        except requests.RequestException:
-            raise RuntimeError("Apify'a baglanilamadi. Internet baglantini kontrol et.")
-
-        if r.status_code == 401:
-            raise RuntimeError("Apify API anahtari gecersiz. Settings > API & Integrations sayfasindan kontrol et.")
-        if r.status_code == 402:
-            raise RuntimeError("Apify ucretsiz kredisi bu ay doldu. Ay basinda yenilenir.")
-        if r.status_code == 408:
-            raise RuntimeError("Apify islemi zamaninda bitmedi. Daha kucuk bir gonderi sayisiyla tekrar dene.")
-        if r.status_code not in (200, 201):
-            raise RuntimeError(f"Apify hatasi ({r.status_code}): {r.text[:200]}")
-
-        try:
-            items = r.json()
-        except ValueError:
-            raise RuntimeError("Apify'dan anlasilmayan bir yanit geldi.")
-        if not isinstance(items, list):
-            raise RuntimeError(f"Apify beklenmeyen yanit: {str(items)[:200]}")
-
-        posts, seen = [], set()
-        for it in items:
-            if not isinstance(it, dict) or it.get("error"):
-                continue
-            p = item_to_post(it)
-            if not p.permalink or p.post_id in seen:
-                continue
-            seen.add(p.post_id)
-            posts.append(p)
-        return posts[: int(pool_limit)]
+        }, on_progress=self.on_progress)
+        if self.include_history:
+            def same_tag(inp):
+                tags = [str(t).lstrip("#").strip().lower() for t in (inp.get("hashtags") or [])]
+                return tag.lower() in tags
+            items = items + past_runs_items(self.token, "ig_hashtag", same_tag)
+        # gecmis dahilse havuz siniri yeni cekime uygulanmis olur; birlesik listede tekrarlar atilir
+        return items_to_posts(items, None if self.include_history else pool_limit)

@@ -1,5 +1,5 @@
 import random
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pandas as pd
 
@@ -11,10 +11,10 @@ MODES = {
 
 
 def _to_date(iso: str):
-    try:
-        return datetime.fromisoformat(iso).astimezone(timezone.utc).date()
-    except ValueError:
-        return None
+    """Gonderi tarihini Turkiye saatine gore gun olarak dondurur."""
+    from timeutil import to_tr
+    dt = to_tr(iso)
+    return dt.date() if dt else None
 
 
 def filter_by_date(posts, start: date, end: date):
