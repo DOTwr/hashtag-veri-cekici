@@ -21,6 +21,7 @@ class FakeApify:
         self.runs = runs or []            # gecmis calistirmalar
         self.inputs = inputs or {}        # kvs -> INPUT
         self.items = {}                   # dataset id -> list
+        self.limits = (0.2, 5.0)          # (kullanilan, limit) USD; None = okunamaz
 
     def post(self, url, headers=None, json=None, timeout=0, params=None):
         actor = url.split("/acts/")[1].split("/")[0]
@@ -41,6 +42,11 @@ class FakeApify:
             return resp(200, self.items.get(ds, []))
         if url.endswith("/runs"):
             return resp(200, {"data": {"items": self.runs}})
+        if url.endswith("/users/me/limits"):
+            if self.limits is None:
+                return resp(500, {"error": "x"})
+            used, limit = self.limits
+            return resp(200, {"data": {"current": {"monthlyUsageUsd": used}, "limits": {"maxMonthlyUsageUsd": limit}}})
         if "/key-value-stores/" in url:
             kvs = url.split("/key-value-stores/")[1].split("/")[0]
             if kvs in self.inputs:

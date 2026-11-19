@@ -1,4 +1,4 @@
-# #DATA - HASHTAGdata
+# #Data
 
 Akademik çalışmalar için sosyal medya veri toplama aracı. Instagram ve X (Twitter) için kendi hesabınızı kullanmadan, anonim olarak veri toplar.
 
@@ -36,7 +36,7 @@ En fazla **100 link** (Instagram ve X karışık) yapıştırılır veya .txt/.c
 | Bluesky | Bluesky App Password | Arama girişi gerektirir. |
 | Demo | Hiçbir şey | Sahte veri, deneme için. |
 
-Yaklaşık ücretler (Apify ücretsiz kredisinden, ayda 5 USD): Instagram gönderi ~2,70 USD / 1000, Instagram yorum ~2,60 USD / 1000, X gönderi ve yanıt ~0,15 USD / 1000. Uygulama her işlemden önce tahmini maliyeti gösterir.
+**Tamamen ücretsiz:** Apify'ın her ay verdiği ücretsiz kredi kullanılır; kart tanımlı olmadığı için ücret çıkmaz. Uygulama kalan krediyi gösterir ve krediye sığmayan işlemleri baştan engeller. Krediyi en çok Instagram yorumları kullanır; X çok az kullanır.
 
 ## Yöntem açısından sınırlılıklar
 - Veriler platformların gösterdiği kadarını kapsar; hashtag evreninin tamamı değildir.

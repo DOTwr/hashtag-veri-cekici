@@ -30,7 +30,7 @@ def form_btn(at, label):
 
 # acilis
 at = new(); ok(at, "acilis")
-assert at.title[0].value == "#DATA - HASHTAGdata"
+assert at.title[0].value == "#Data"
 assert len(at.tabs) == 3
 print("acilis OK")
 
@@ -148,4 +148,29 @@ ti(at, "Apify API anahtari").set_value("TOKEN").run()
 at.text_area[0].set_value(many)
 form_btn(at, "Linkleri analiz et").click().run(); ok(at, "101")
 assert any("En fazla 100" in e.value for e in at.error)
+
+# --- ucretsiz kredi korumasi: krediye sigmayan islem engellenir, hicbir arac calismaz
+fake = FakeApify({"apify~instagram-scraper": [ig_post]})
+fake.limits = (4.99, 5.0)                       # neredeyse bitmis kredi
+with patch(P + ".post", side_effect=fake.post), patch(P + ".get", side_effect=fake.get):
+    at = new()
+    ti(at, "Apify API anahtari").set_value("TOKEN2").run()
+    at.text_area[0].set_value("https://www.instagram.com/p/Df50n79NQYR/")
+    form_btn(at, "Linkleri analiz et").click().run()
+ok(at, "kredi")
+assert any("ucretsiz krediye sigmiyor" in e.value for e in at.error), [e.value for e in at.error]
+assert fake.calls == [], fake.calls
+assert not any("USD" in c.value for c in at.caption)
+print("kredi korumasi OK")
+
+# kredi bilgisi okunamazsa engellemez
+fake = FakeApify({"apify~instagram-scraper": [ig_post], "apify~instagram-comment-scraper": []})
+fake.limits = None
+with patch(P + ".post", side_effect=fake.post), patch(P + ".get", side_effect=fake.get):
+    at = new()
+    ti(at, "Apify API anahtari").set_value("TOKEN3").run()
+    at.text_area[0].set_value("https://www.instagram.com/p/Df50n79NQYR/")
+    form_btn(at, "Linkleri analiz et").click().run()
+ok(at, "kredi yok")
+assert at.session_state["bulk_res"]["details"][0].found
 print("TUM UYGULAMA TESTLERI GECTI")

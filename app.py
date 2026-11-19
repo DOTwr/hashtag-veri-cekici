@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from archive import Archive, ArchiveConnector
+from connectors.apify_run import estimate_cost, free_credit
 from connectors.bluesky import BlueskyConnector
 from connectors.instagram_apify import InstagramApifyConnector
 from connectors.instagram_graph import InstagramGraphConnector
@@ -18,7 +19,7 @@ from sampling import MODES, filter_by_date, select, to_dataframe
 from social import MAX_LINKS, analyze_links, estimate, mask_mentions, parse_links
 from timeutil import fmt_tr, now_tr
 
-APP_NAME = "#DATA - HASHTAGdata"
+APP_NAME = "#Data"
 
 SRC_IG = "Instagram (Apify, hesapsiz)"
 SRC_X = "X / Twitter (Apify, hesapsiz)"
@@ -40,6 +41,11 @@ def _secret(name: str) -> str:
 
 st.set_page_config(page_title=APP_NAME, page_icon="#", layout="wide")
 
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _credit(token: str):
+    return free_credit(token)
+
 # ------------------------------------------------------------------ yan menu
 with st.sidebar:
     st.markdown(f"## {APP_NAME}")
@@ -52,11 +58,34 @@ with st.sidebar:
         apify_token = st.text_input(
             "Apify API anahtari", type="password",
             help="console.apify.com > Settings > API & Integrations. Kaydedilmez; sayfa kapaninca silinir.")
-    st.caption("Instagram ve X icin gerekir. Ucretsiz plan: ayda 5 USD kredi.")
+    st.caption("Instagram ve X icin gerekir. Tamamen ucretsiz: Apify'in her ay verdigi ucretsiz kredi kullanilir, "
+               "kart tanimli olmadigi icin hicbir ucret cikmaz. Kredi biterse islem sadece durur.")
+    credit = _credit(apify_token) if apify_token else None
+    if credit:
+        used, limit = credit
+        left = max(limit - used, 0.0)
+        st.progress(min(used / limit, 1.0) if limit else 1.0,
+                    text=f"Bu ayki ucretsiz kredi: %{round(100 * left / limit) if limit else 0} kaldi")
     hide_mentions = st.checkbox("Metinlerdeki @kullanici adlarini gizle", value=True,
                                 help="Anonimlik icin aciklama ve yorumlardaki @ad ifadeleri @kullanici olarak gosterilir.")
 
 mask = mask_mentions if hide_mentions else (lambda t: t)
+
+
+def _credit_ok(need: float) -> bool:
+    """Islem ucretsiz krediye sigmiyorsa engeller. Kredi okunamazsa engellemez."""
+    if credit is None:
+        return True
+    used, limit = credit
+    left = max(limit - used, 0.0)
+    pct = round(100 * need / limit, 1) if limit else 0
+    if need > left:
+        st.error(f"Bu islem bu ayki ucretsiz krediye sigmiyor (kredinin yaklasik %{pct}'i gerekir, "
+                 f"%{round(100 * left / limit) if limit else 0} kaldi). Link veya yorum sayisini azalt; "
+                 "kredi ay basinda yenilenir.")
+        return False
+    st.caption(f"Bu islem ucretsiz kredinin yaklasik %{pct}'ini kullanir.")
+    return True
 
 
 def _progress_cb(placeholder):
@@ -88,7 +117,8 @@ with tab_tag:
             s1, s2 = st.columns(2)
             seed = s1.number_input("Seed (tekrarlanabilirlik)", 0, 10**9, 42)
             pool_limit = s2.number_input("Havuz ust siniri", 1, 20000, 30,
-                                         help="Cekilecek en fazla gonderi. Instagram ucretsiz planda ~30 ile sinirli.")
+                                         help="Cekilecek en fazla gonderi. Instagram ucretsiz planda ~30 ile sinirli. X'te en yeni gonderiler "
+                                              "geldigi icin 30 gunun tamamini kapsamak icin 300-500 gibi bir deger gir (X cok az kredi harcar).")
 
         with st.expander("Ek ayarlar (onceki cekimleri birlestirme, diger kaynaklar)"):
             st.markdown("**Daha fazla gonderi icin onceki cekimleri birlestir.** Ucretsiz planda her aramada "
@@ -123,8 +153,15 @@ with tab_tag:
             err = "Graph API icin Ek ayarlar'da User ID ve Access Token gerekli."
         elif source == SRC_BLUESKY and (not bs_handle or not bs_pass):
             err = "Bluesky icin Ek ayarlar'da handle ve App Password gerekli."
+        need = 0.0
+        if not err and source == SRC_IG:
+            need = estimate_cost("ig_hashtag", int(pool_limit))
+        elif not err and source == SRC_X:
+            need = estimate_cost("x_posts", int(pool_limit))
         if err:
             st.error(err)
+        elif source in APIFY_SOURCES and not _credit_ok(need):
+            pass
         else:
             prog = st.empty()
             cb = _progress_cb(prog)
@@ -426,8 +463,7 @@ with tab_one:
                      "gonderi linki bulunamadi.")
         elif not apify_token:
             st.error("Soldaki menuye Apify API anahtarini gir.")
-        else:
-            st.caption(f"Tahmini maliyet: ~{estimate(links[:1], int(one_n), True):.3f} USD (ucretsiz krediden)")
+        elif _credit_ok(estimate(links[:1], int(one_n), True)):
             _run_report(links[:1], True, one_n, "one")
     if st.session_state.get("one_res"):
         _show_report(st.session_state["one_res"], "one", "Gonderi yorumlari")
@@ -458,8 +494,8 @@ with tab_bulk:
             st.error("Soldaki menuye Apify API anahtarini gir.")
         else:
             ig = sum(1 for l in links if l.platform == "instagram")
-            st.caption(f"{len(links)} link ({ig} Instagram, {len(links) - ig} X). Tahmini maliyet: "
-                       f"~{estimate(links, int(bulk_n), bulk_comments):.2f} USD (ucretsiz krediden).")
-            _run_report(links, bulk_comments, bulk_n, "bulk")
+            st.caption(f"{len(links)} link ({ig} Instagram, {len(links) - ig} X).")
+            if _credit_ok(estimate(links, int(bulk_n), bulk_comments)):
+                _run_report(links, bulk_comments, bulk_n, "bulk")
     if st.session_state.get("bulk_res"):
         _show_report(st.session_state["bulk_res"], "bulk", "Toplu link analizi")

@@ -60,7 +60,7 @@ def build_docx(posts, meta: dict, with_images: bool = True, mask=None) -> bytes:
     style.font.name = "Calibri"
     style.font.size = Pt(11)
 
-    doc.add_heading(f"#DATA - HASHTAGdata | #{meta.get('hashtag', '')} gonderi listesi", level=1)
+    doc.add_heading(f"#Data | #{meta.get('hashtag', '')} gonderi listesi", level=1)
     info = doc.add_paragraph()
     info.add_run(
         f"Kaynak: {meta.get('conn_name', '')}\n"
@@ -121,7 +121,7 @@ def build_links_docx(details, comments, meta: dict, with_images: bool = True, ma
     style.font.name = "Calibri"
     style.font.size = Pt(11)
 
-    doc.add_heading(f"#DATA - HASHTAGdata | {meta.get('title', 'Link analizi')}", level=1)
+    doc.add_heading(f"#Data | {meta.get('title', 'Link analizi')}", level=1)
     found = sum(1 for d in details if d.found)
     info = doc.add_paragraph()
     info.add_run(

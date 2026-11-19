@@ -55,7 +55,7 @@ with patch("export_word.requests.get", return_value=bad):
                             with_images=True, mask=mask_mentions)
 d = Document(io.BytesIO(data))
 t = "\n".join(p.text for p in d.paragraphs)
-assert "#DATA - HASHTAGdata | Deneme" in t and "1. X gonderisi" in t and "2. Instagram gonderisi" in t
+assert "#Data | Deneme" in t and "1. X gonderisi" in t and "2. Instagram gonderisi" in t
 assert "2026-11-19 18:19" in t and "217 begeni" in t and "44 repost" in t and "toplam etkilesim 276" in t
 assert "@NASA" not in t and "Metin @kullanici" in t
 assert "Yorumlar (2)" in t and "| yanit" in t and "\x07" not in t

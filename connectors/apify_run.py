@@ -119,3 +119,17 @@ def past_runs_items(token: str, kind: str, match_input, limit: int = 50) -> list
         if isinstance(items, list):
             out.extend(it for it in items if isinstance(it, dict))
     return out
+
+
+def free_credit(token: str):
+    """Bu ayki ucretsiz kredi durumu: (kullanilan_usd, limit_usd) ya da okunamazsa None."""
+    token = (token or "").strip()
+    if not token:
+        return None
+    try:
+        data = (_get(f"{API}/users/me/limits", token).json() or {}).get("data") or {}
+        used = float((data.get("current") or {}).get("monthlyUsageUsd"))
+        limit = float((data.get("limits") or {}).get("maxMonthlyUsageUsd"))
+    except (RuntimeError, TypeError, ValueError, AttributeError):
+        return None
+    return max(used, 0.0), max(limit, 0.0)
