@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+arsiv.db
+.streamlit/secrets.toml
+.venv/
+venv/
+*.csv
